@@ -16,6 +16,7 @@ START_MESSAGE = os.getenv("START_MESSAGE")
 WELCOME_MESSAGE = os.getenv("WELCOME_MESSAGE")
 VIP_BENEFITS = os.getenv("VIP_BENEFITS")
 CHECKOUT_MESSAGE = os.getenv("CHECKOUT_MESSAGE")
+VIP_INVITE_MESSAGE = os.getenv("VIP_INVITE_MESSAGE")  # Mensagem de convite para o VIP
 
 # Lista para armazenar os usuários que já interagiram com o bot
 users = set()
@@ -41,6 +42,9 @@ def send_checkout(message):
 
     # Envia os benefícios do VIP em um bloco separado
     bot.send_message(user_id, VIP_BENEFITS)
+
+    # Envia a mensagem de convite para o VIP
+    bot.send_message(user_id, VIP_INVITE_MESSAGE)
 
     # Aguarda 2 segundos antes de enviar o checkout
     time.sleep(2)
