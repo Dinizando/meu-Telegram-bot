@@ -22,25 +22,20 @@ users = set()
 # Função para enviar a mensagem "Última Chamada" automaticamente
 def send_urgent_message():
     while True:
-       time.sleep(60)  # Espera 1 minuto antes de enviar de novo
-        
+        time.sleep(60)  # Espera 1 minuto antes de enviar de novo
         for user_id in users:
             bot.send_message(user_id, START_MESSAGE)
 
 # Iniciar a thread para mensagens automáticas
 threading.Thread(target=send_urgent_message, daemon=True).start()
 
-# Quando alguém digita /start, adiciona na lista de usuários e envia as mensagens
-@bot.message_handler(commands=['start'])
+# Quando o usuário digita /start, adiciona na lista e envia mensagens
+@bot.message_handler(commands=["start"])
 def send_checkout(message):
     user_id = message.chat.id
-    users.add(user_id)  # Adiciona o usuário à lista de notificações futuras
-
-    # Enviar mensagem de urgência
+    users.add(user_id)  # Adiciona o usuário na lista de notificações futuras.
     bot.send_message(user_id, START_MESSAGE)
-
-    # Enviar mensagem de pagamento
     bot.send_message(user_id, CHECKOUT_MESSAGE)
 
-# Manter o bot rodando
+# Mantém o bot rodando
 bot.polling()
