@@ -23,6 +23,7 @@ users = set()
 def send_urgent_message():
     while True:
        time.sleep(60)  # Espera 1 minuto antes de enviar de novo
+        
         for user_id in users:
             bot.send_message(user_id, START_MESSAGE)
 
