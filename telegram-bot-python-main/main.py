@@ -20,14 +20,12 @@ CHECKOUT_MESSAGE = os.getenv("CHECKOUT_MESSAGE")
 # Lista para armazenar os usuários que já interagiram com o bot
 users = set()
 
-# Função para enviar a mensagem de urgência a cada 24 horas para usuários e canal
+# Função para enviar a mensagem de urgência a cada 24 horas
 def send_urgent_message():
     while True:
         time.sleep(86400)  # 24 horas
         for user_id in users:
             bot.send_message(user_id, START_MESSAGE)
-        # Envia a mensagem também no canal do Telegram
-        bot.send_message(CHANNEL_ID, START_MESSAGE)
 
 # Iniciar a thread para mensagens automáticas
 threading.Thread(target=send_urgent_message, daemon=True).start()
@@ -49,6 +47,14 @@ def send_checkout(message):
 
     # Envia o checkout
     bot.send_message(user_id, CHECKOUT_MESSAGE)
+
+# 🚀 Função para enviar mensagem automática ao canal do Telegram
+def send_channel_message():
+    bot.send_message(CHANNEL_ID, "🚀 Teste de mensagem automática do bot!")
+    print(f"Mensagem enviada para o canal ID: {CHANNEL_ID}")
+
+# Exemplo: Enviar mensagem ao canal ao iniciar
+send_channel_message()
 
 # Mantém o bot rodando
 bot.polling()
