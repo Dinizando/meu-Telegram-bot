@@ -2,6 +2,7 @@ import os
 import telebot
 import threading
 import time
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
 
 # Carregar variáveis do ambiente do Railway
@@ -9,56 +10,26 @@ load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")  # ID do canal do Telegram
+VIP_INVITE_MESSAGE = os.getenv("VIP_INVITE_MESSAGE")  # Mensagem VIP
+VIP_GROUP_LINK = "https://t.me/SeuGrupoVIP"  # Substitua pelo link do seu grupo VIP
+
 bot = telebot.TeleBot(TOKEN)
 
-# Mensagens do Railway
-START_MESSAGE = os.getenv("START_MESSAGE")
-WELCOME_MESSAGE = os.getenv("WELCOME_MESSAGE")
-VIP_BENEFITS = os.getenv("VIP_BENEFITS")
-CHECKOUT_MESSAGE = os.getenv("CHECKOUT_MESSAGE")
-VIP_INVITE_MESSAGE = os.getenv("VIP_INVITE_MESSAGE")  # Mensagem de convite para o VIP
-
-# Lista para armazenar os usuários que já interagiram com o bot
-users = set()
-
-# Função para enviar a mensagem de urgência a cada 24 horas
-def send_urgent_message():
+# Função para enviar a mensagem VIP no canal uma vez por dia
+def send_vip_invite():
     while True:
-        time.sleep(86400)  # 24 horas
-        for user_id in users:
-            bot.send_message(user_id, START_MESSAGE)
+        time.sleep(86400)  # Aguarda 24 horas
 
-# Iniciar a thread para mensagens automáticas
-threading.Thread(target=send_urgent_message, daemon=True).start()
+        # Criar um botão para direcionar ao grupo VIP
+        markup = InlineKeyboardMarkup()
+        btn_vip = InlineKeyboardButton("🔑 Acessar o VIP", url=VIP_GROUP_LINK)
+        markup.add(btn_vip)
 
-# Comando /start para organizar as mensagens corretamente
-@bot.message_handler(commands=["start"])
-def send_checkout(message):
-    user_id = message.chat.id
-    users.add(user_id)  # Adiciona o usuário à lista de notificações futuras
-    
-    # Envia a mensagem de boas-vindas
-    bot.send_message(user_id, WELCOME_MESSAGE)
+        # Enviar mensagem no canal com o botão
+        bot.send_message(CHANNEL_ID, VIP_INVITE_MESSAGE, reply_markup=markup)
 
-    # Envia os benefícios do VIP em um bloco separado
-    bot.send_message(user_id, VIP_BENEFITS)
-
-    # Envia a mensagem de convite para o VIP
-    bot.send_message(user_id, VIP_INVITE_MESSAGE)
-
-    # Aguarda 2 segundos antes de enviar o checkout
-    time.sleep(2)
-
-    # Envia o checkout
-    bot.send_message(user_id, CHECKOUT_MESSAGE)
-
-# 🚀 Função para enviar mensagem automática ao canal do Telegram
-def send_channel_message():
-    bot.send_message(CHANNEL_ID, "🚀 Teste de mensagem automática do bot!")
-    print(f"Mensagem enviada para o canal ID: {CHANNEL_ID}")
-
-# Exemplo: Enviar mensagem ao canal ao iniciar
-send_channel_message()
+# Iniciar a thread para envio automático da mensagem VIP
+threading.Thread(target=send_vip_invite, daemon=True).start()
 
 # Mantém o bot rodando
 bot.polling()
