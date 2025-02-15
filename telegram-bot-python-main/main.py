@@ -13,7 +13,7 @@ bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(commands=['start', 'hello'])
 def send_welcome(message):
-    bot.reply_to(message, START_MESSAGE)  # Responde com a mensagem configurada
+    bot.reply_to(message, START_MESSAGE)  # Respond with the configured message
 
 @bot.message_handler(func=lambda msg: True)
 def echo_all(message):
