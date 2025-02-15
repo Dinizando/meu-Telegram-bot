@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHANNEL_ID = os.getenv("CHANNEL_ID")  # ID do canal do Telegram
 bot = telebot.TeleBot(TOKEN)
 
 # Mensagens do Railway
@@ -19,12 +20,14 @@ CHECKOUT_MESSAGE = os.getenv("CHECKOUT_MESSAGE")
 # Lista para armazenar os usuários que já interagiram com o bot
 users = set()
 
-# Função para enviar a mensagem de urgência a cada 24 horas
+# Função para enviar a mensagem de urgência a cada 24 horas para usuários e canal
 def send_urgent_message():
     while True:
         time.sleep(86400)  # 24 horas
         for user_id in users:
             bot.send_message(user_id, START_MESSAGE)
+        # Envia a mensagem também no canal do Telegram
+        bot.send_message(CHANNEL_ID, START_MESSAGE)
 
 # Iniciar a thread para mensagens automáticas
 threading.Thread(target=send_urgent_message, daemon=True).start()
