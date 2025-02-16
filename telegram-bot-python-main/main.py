@@ -30,4 +30,5 @@ logging.basicConfig(
 )
 
 # Função para registrar mensagens no arquivo de log
-def l
+def log_message(message):
+    logging.info(message)
