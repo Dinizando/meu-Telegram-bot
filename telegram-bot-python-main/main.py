@@ -24,14 +24,14 @@ users = set()
 # 🔹 Função para enviar a mensagem de urgência a cada 24 horas
 def send_urgent_message():
     while True:
-        time.sleep(10)  # 24 horas
+        time.sleep(86400)  # 24 horas
         for user_id in users:
             bot.send_message(user_id, START_MESSAGE)
 
 # 🔹 Função para enviar a mensagem VIP no canal do Telegram a cada 24 horas
 def send_vip_invite():
     while True:
-        time.sleep(86400)  # 24 horas
+        time.sleep(10)  # 24 horas
         bot.send_message(CHANNEL_ID, VIP_INVITE_MESSAGE)
 
 # Iniciar as threads para mensagens automáticas
