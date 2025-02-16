@@ -18,7 +18,7 @@ WELCOME_MESSAGE = os.getenv("WELCOME_MESSAGE")
 VIP_BENEFITS = os.getenv("VIP_BENEFITS")
 CHECKOUT_MESSAGE = os.getenv("CHECKOUT_MESSAGE")
 VIP_INVITE_MESSAGE = os.getenv("VIP_INVITE_MESSAGE")  # Mensagem VIP
-VIP_GROUP_LINK = "https://t.me/SeuGrupoVIP"  # Substitua pelo link do grupo VIP
+VIP_GROUP_LINK = "https://web.telegram.org/a/#7530574905"  # Substitua pelo link do grupo VIP
 
 # Lista para armazenar os usuários que já interagiram com o bot
 users = set()
