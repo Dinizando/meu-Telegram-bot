@@ -4,31 +4,42 @@ import threading
 import time
 import logging
 from datetime import datetime
-from telebot.types import InputMediaPhoto, InputMediaVideo
+from telebot.types import InputMediaPhoto
 from dotenv import load_dotenv
 
 # Carregar variáveis do ambiente do Railway
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID")  # ID do canal onde o bot envia mensagens automáticas
-ADMIN_ID_1 = os.getenv("ADMIN_ID_1")  # ID do admin (EUA)
-ADMIN_ID_2 = os.getenv("ADMIN_ID_2")  # ID do admin (Brasil)
-LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID")  # Canal privado para logs do admin
+CHANNEL_ID = os.getenv("CHANNEL_ID")
+LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID")
+ADMIN_ID_1 = os.getenv("ADMIN_ID_1")
+ADMIN_ID_2 = os.getenv("ADMIN_ID_2")
+VIP_GROUP_LINK = os.getenv("VIP_GROUP_LINK")
+
+# Converter IDs de admin para inteiros (tratamento de erro se None)
+try:
+    ADMIN_ID_1 = int(ADMIN_ID_1) if ADMIN_ID_1 else None
+    ADMIN_ID_2 = int(ADMIN_ID_2) if ADMIN_ID_2 else None
+    CHANNEL_ID = int(CHANNEL_ID) if CHANNEL_ID else None
+    LOG_CHANNEL_ID = int(LOG_CHANNEL_ID) if LOG_CHANNEL_ID else None
+except ValueError:
+    raise ValueError("Erro ao converter IDs de admin ou canal. Verifique as variáveis de ambiente.")
 
 bot = telebot.TeleBot(TOKEN)
 
 # Mensagens do Railway
-AUTOMATIC_MESSAGE = os.getenv("AUTOMATIC_MESSAGE")  # Mensagem automática no canal
+AUTOMATIC_MESSAGE = os.getenv("AUTOMATIC_MESSAGE")
 WELCOME_MESSAGE = os.getenv("WELCOME_MESSAGE")
 VIP_BENEFITS = os.getenv("VIP_BENEFITS")
 CHECKOUT_MESSAGE = os.getenv("CHECKOUT_MESSAGE")
 
-# Lista para armazenar usuários que interagiram com o bot
+# Estruturas otimizadas para armazenamento de dados
 users = set()
-last_auto_message_time = None  # Para evitar mensagens duplicadas no mesmo dia
+pending_payments = {}
+last_auto_message_time = None
 
-# Configurar logging para salvar conversas
+# Configurar logging
 logging.basicConfig(
     filename="bot_interactions.log",
     level=logging.INFO,
@@ -36,55 +47,115 @@ logging.basicConfig(
     encoding="utf-8",
 )
 
-# Função para registrar mensagens no log
+# Registrar mensagens no log
 def log_message(user_id, user_name, text):
     log_entry = f"User {user_name} ({user_id}): {text}"
     logging.info(log_entry)
-    bot.send_message(LOG_CHANNEL_ID, log_entry)  # Enviar log para canal privado do admin
+    bot.send_message(LOG_CHANNEL_ID, log_entry)
 
-# Função para enviar mensagem automática ao canal às 12h e 00h
-def scheduled_broadcast():
+# Enviar mensagem automática no canal às 12h e 00h
+def scheduled_message():
     global last_auto_message_time
     while True:
-        now = datetime.now()
-        if now.hour in [12, 0] and now.date() != last_auto_message_time:
-            try:
+        try:
+            now = datetime.now()
+            if now.hour in [12, 0] and now.date() != last_auto_message_time:
                 bot.send_message(CHANNEL_ID, AUTOMATIC_MESSAGE)
                 bot.send_message(LOG_CHANNEL_ID, "📢 Mensagem automática enviada ao canal.")
-                last_auto_message_time = now.date()  # Atualiza o último envio
-            except Exception as e:
-                bot.send_message(LOG_CHANNEL_ID, f"⚠ Erro ao enviar mensagem automática: {e}")
-        time.sleep(3600)  # Verifica a cada hora
+                last_auto_message_time = now.date()
+            time.sleep(60)
+        except Exception as e:
+            bot.send_message(LOG_CHANNEL_ID, f"⚠ Erro ao enviar mensagem automática: {e}")
+            time.sleep(60)
 
-# Iniciar a thread para envio automático ao canal
-threading.Thread(target=scheduled_broadcast, daemon=True).start()
+# Iniciar a thread de envio automático
+threading.Thread(target=scheduled_message, daemon=True).start()
 
-# Comando para enviar mensagens de Broadcast manualmente
-@bot.message_handler(commands=["broadcast"])
-def broadcast_media(message):
-    user_id = str(message.chat.id)
-    
-    if user_id not in [ADMIN_ID_1, ADMIN_ID_2]:
-        bot.send_message(user_id, "🚫 Você não tem permissão para usar este comando.")
-        return
+# Comando /start
+@bot.message_handler(commands=["start"])
+def send_checkout(message):
+    user_id = message.chat.id
+    user_name = message.from_user.first_name
 
-    args = message.text.split(" ", 1)
-    if len(args) < 2:
-        bot.send_message(user_id, "⚠ Erro: Envie a mensagem no formato `/broadcast <texto>`.")
-        return
-    
-    broadcast_text = args[1]
+    if user_id in [ADMIN_ID_1, ADMIN_ID_2]:
+        bot.send_message(user_id, "✅ Você está autenticado como ADMIN.")
+    else:
+        users.add(user_id)
+        log_message(user_id, user_name, "/start")
 
-    try:
-        bot.send_message(CHANNEL_ID, broadcast_text)
-        bot.send_message(user_id, "✅ Mensagem enviada com sucesso ao canal!")
-    except Exception as e:
-        bot.send_message(user_id, f"⚠ Erro ao enviar mensagem: {e}")
+        bot.send_message(ADMIN_ID_1, f"📌 Novo usuário interagiu! 🆔 ID: {user_id} 👤 Nome: {user_name}")
+        bot.send_message(ADMIN_ID_2, f"📌 Novo usuário interagiu! 🆔 ID: {user_id} 👤 Nome: {user_name}")
 
-# Comando para enviar mídia (foto ou vídeo) junto com texto
-@bot.message_handler(content_types=["photo", "video", "document"])
+        bot.send_message(user_id, WELCOME_MESSAGE)
+        bot.send_message(user_id, VIP_BENEFITS)
+        time.sleep(2)
+        bot.send_message(user_id, CHECKOUT_MESSAGE)
+        bot.send_message(user_id, "💳 Envie o comprovante de pagamento aqui para validação.")
+
+# Comando /me para admins
+@bot.message_handler(commands=["me"])
+def admin_status(message):
+    if message.chat.id in [ADMIN_ID_1, ADMIN_ID_2]:
+        bot.send_message(
+            message.chat.id,
+            f"📊 Estatísticas do Bot:\n👥 Usuários interagidos: {len(users)}\n📨 Última mensagem automática enviada: {last_auto_message_time}",
+        )
+    else:
+        bot.send_message(message.chat.id, "⛔ Você não tem permissão para acessar este comando.")
+
+# Comando para admins enviarem mensagens personalizadas
+@bot.message_handler(commands=["msg"])
+def send_admin_message(message):
+    if message.chat.id in [ADMIN_ID_1, ADMIN_ID_2]:
+        try:
+            parts = message.text.split(" ", 2)
+            target_user_id = int(parts[1])
+            admin_message = parts[2]
+
+            bot.send_message(target_user_id, f"📩 Mensagem do ADMIN:\n{admin_message}")
+            bot.send_message(message.chat.id, "✅ Mensagem enviada com sucesso.")
+        except:
+            bot.send_message(message.chat.id, "⚠ Erro: Use o formato `/msg <user_id> <mensagem>`")
+
+# Processar envio de comprovantes
+@bot.message_handler(content_types=["photo", "document"])
+def receber_comprovante(message):
+    user_id = message.chat.id
+    user_name = message.from_user.first_name
+
+    if message.photo or message.document:
+        pending_payments[user_id] = user_name
+        bot.send_message(ADMIN_ID_1, f"📩 Novo pagamento recebido! 🆔 {user_id} 👤 {user_name}")
+        bot.send_message(ADMIN_ID_2, f"📩 Novo pagamento recebido! 🆔 {user_id} 👤 {user_name}")
+
+        bot.forward_message(ADMIN_ID_1, user_id, message.message_id)
+        bot.forward_message(ADMIN_ID_2, user_id, message.message_id)
+        bot.send_message(user_id, "📨 Seu pagamento foi enviado para análise.")
+
+# Aprovar pagamento
+@bot.message_handler(commands=["aprovar"])
+def confirmar_pagamento(message):
+    if message.chat.id in [ADMIN_ID_1, ADMIN_ID_2]:
+        try:
+            parts = message.text.split(" ", 1)
+            target_user_id = int(parts[1])
+
+            if target_user_id in pending_payments:
+                bot.send_message(
+                    target_user_id,
+                    f"🎉 Parabéns! Seu pagamento foi confirmado. Aqui está seu acesso ao VIP: {VIP_GROUP_LINK}",
+                )
+                bot.send_message(message.chat.id, f"✅ Acesso VIP liberado para {target_user_id}.")
+                del pending_payments[target_user_id]
+            else:
+                bot.send_message(message.chat.id, "⚠ Este usuário não tem pagamento pendente.")
+        except:
+            bot.send_message(message.chat.id, "⚠ Erro: Use `/aprovar <user_id>`")
+
+# Enviar mídia (foto ou vídeo) no canal
+@bot.message_handler(content_types=["photo", "video"])
 def handle_media(message):
-    user_id = str(message.chat.id)
+    user_id = message.chat.id
 
     if user_id not in [ADMIN_ID_1, ADMIN_ID_2]:
         bot.send_message(user_id, "🚫 Você não tem permissão para enviar mídia.")
@@ -94,36 +165,13 @@ def handle_media(message):
 
     try:
         if message.photo:
-            file_id = message.photo[-1].file_id
-            bot.send_photo(CHANNEL_ID, file_id, caption=caption)
+            bot.send_photo(CHANNEL_ID, message.photo[-1].file_id, caption=caption)
         elif message.video:
-            file_id = message.video.file_id
-            bot.send_video(CHANNEL_ID, file_id, caption=caption)
-        elif message.document:
-            file_id = message.document.file_id
-            bot.send_document(CHANNEL_ID, file_id, caption=caption)
+            bot.send_video(CHANNEL_ID, message.video.file_id, caption=caption)
 
-        bot.send_message(user_id, "✅ Mídia enviada com sucesso ao canal!")
+        bot.send_message(user_id, "✅ Mídia enviada ao canal!")
     except Exception as e:
         bot.send_message(user_id, f"⚠ Erro ao enviar mídia: {e}")
 
-# Comando para verificar o status do bot
-@bot.message_handler(commands=["status"])
-def status_command(message):
-    user_id = str(message.chat.id)
-
-    if user_id not in [ADMIN_ID_1, ADMIN_ID_2]:
-        bot.send_message(user_id, "🚫 Você não tem permissão para ver essas informações.")
-        return
-
-    now = datetime.now()
-    status_message = f"📊 **Status do Bot**\n\n" \
-                     f"🟢 Online: Sim\n" \
-                     f"⏰ Horário atual: {now.strftime('%Y-%m-%d %H:%M:%S')}\n" \
-                     f"📌 Última mensagem automática: {last_auto_message_time}\n" \
-                     f"👥 Total de usuários cadastrados: {len(users)}"
-
-    bot.send_message(user_id, status_message, parse_mode="Markdown")
-
-# Mantém o bot rodando
+# Rodar o bot
 bot.polling()
