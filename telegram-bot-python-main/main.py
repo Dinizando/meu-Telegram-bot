@@ -11,34 +11,27 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID")
-LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID")
-ADMIN_ID_1 = os.getenv("ADMIN_ID_1")
-ADMIN_ID_2 = os.getenv("ADMIN_ID_2")
-VIP_GROUP_LINK = os.getenv("VIP_GROUP_LINK")
-
-# Converter IDs para inteiros (evita erro de None)
-try:
-    ADMIN_ID_1 = int(ADMIN_ID_1) if ADMIN_ID_1 else None
-    ADMIN_ID_2 = int(ADMIN_ID_2) if ADMIN_ID_2 else None
-    CHANNEL_ID = int(CHANNEL_ID) if CHANNEL_ID else None
-    LOG_CHANNEL_ID = int(LOG_CHANNEL_ID) if LOG_CHANNEL_ID else None
-except ValueError:
-    raise ValueError("Erro ao converter IDs. Verifique as variáveis de ambiente.")
+CHANNEL_ID = int(os.getenv("CHANNEL_ID"))  # ID do canal para envio de mensagens automáticas
+ADMIN_ID_1 = int(os.getenv("ADMIN_ID_1"))  # ID da conta dos EUA
+ADMIN_ID_2 = int(os.getenv("ADMIN_ID_2"))  # ID da conta do Brasil
+LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID"))  # Canal privado para logs do admin
+VIP_GROUP_LINK = os.getenv("VIP_GROUP_LINK")  # Link do grupo VIP
 
 bot = telebot.TeleBot(TOKEN)
 
-# Mensagens armazenadas no Railway
-AUTOMATIC_MESSAGE = os.getenv("AUTOMATIC_MESSAGE")
+# Mensagens configuradas no Railway
+AUTOMATIC_MESSAGE = os.getenv("AUTOMATIC_MESSAGE")  # Mensagem automática no canal
 WELCOME_MESSAGE = os.getenv("WELCOME_MESSAGE")
 VIP_BENEFITS = os.getenv("VIP_BENEFITS")
 CHECKOUT_MESSAGE = os.getenv("CHECKOUT_MESSAGE")
+VIP_INVITE_MESSAGE = os.getenv("VIP_INVITE_MESSAGE")
 
-# Lista para armazenar os usuários que interagiram com o bot
+# Lista de usuários registrados
 users = set()
-pending_payments = {}
+pending_payments = {}  # Dicionário para armazenar usuários aguardando confirmação de pagamento
+last_auto_message_time = None  # Controla a última mensagem automática enviada
 
-# Configurar logging para salvar interações
+# Configurar logging para registrar interações
 logging.basicConfig(
     filename="bot_interactions.log",
     level=logging.INFO,
@@ -50,123 +43,127 @@ logging.basicConfig(
 def log_message(user_id, user_name, text):
     log_entry = f"User {user_name} ({user_id}): {text}"
     logging.info(log_entry)
-    bot.send_message(LOG_CHANNEL_ID, log_entry)
+    bot.send_message(LOG_CHANNEL_ID, log_entry)  # Enviar log para canal privado do admin
 
-# Enviar mensagem automática no canal às 12h e 00h
+# Envia mensagem automática no canal às 12h e 00h
 def scheduled_message():
     global last_auto_message_time
     while True:
-        try:
-            now = datetime.now()
-            if now.hour in [12, 0] and now.date() != last_auto_message_time:
-                bot.send_message(CHANNEL_ID, AUTOMATIC_MESSAGE)
-                bot.send_message(LOG_CHANNEL_ID, "📢 Mensagem automática enviada ao canal.")
-                last_auto_message_time = now.date()
-            time.sleep(60)
-        except Exception as e:
-            bot.send_message(LOG_CHANNEL_ID, f"⚠ Erro ao enviar mensagem automática: {e}")
-            time.sleep(60)
+        now = datetime.now()
+        if now.hour in [12, 0] and now.date() != last_auto_message_time:
+            bot.send_message(CHANNEL_ID, AUTOMATIC_MESSAGE)
+            bot.send_message(LOG_CHANNEL_ID, "📢 Mensagem automática enviada ao canal.")
+            last_auto_message_time = now.date()
+        time.sleep(60)
 
-# Iniciar a thread de envio automático
+# Iniciar a thread para envio automático de mensagens no canal
 threading.Thread(target=scheduled_message, daemon=True).start()
 
-# 🚀 **Comando /start corrigido**
+# Comando /start para enviar mensagens corretamente
 @bot.message_handler(commands=["start"])
 def send_checkout(message):
     user_id = message.chat.id
-    user_name = message.from_user.first_name
+    user_name = message.from_user.first_name  
 
-    # Se for admin, apenas confirma a autenticação
+    # Se for admin, apenas informa que ele está autenticado
     if user_id in [ADMIN_ID_1, ADMIN_ID_2]:
         bot.send_message(user_id, "✅ Você está autenticado como ADMIN.")
-        return
+        return  
 
-    # Adiciona usuário na lista de interações
-    if user_id not in users:
-        users.add(user_id)
-        log_message(user_id, user_name, "/start")
+    # Se for usuário normal, envia sequência de mensagens
+    users.add(user_id)  
+    log_message(user_id, user_name, "/start")  
 
-        # Envia notificação para os administradores
-        bot.send_message(ADMIN_ID_1, f"📌 Novo usuário interagiu! 🆔 ID: {user_id} 👤 Nome: {user_name}")
-        bot.send_message(ADMIN_ID_2, f"📌 Novo usuário interagiu! 🆔 ID: {user_id} 👤 Nome: {user_name}")
+    # Notifica os administradores sobre um novo usuário
+    bot.send_message(ADMIN_ID_1, f"📌 Novo usuário interagiu!\n🆔 ID: {user_id}\n👤 Nome: {user_name}")
+    bot.send_message(ADMIN_ID_2, f"📌 Novo usuário interagiu!\n🆔 ID: {user_id}\n👤 Nome: {user_name}")
 
-    # 🚀 **Correção da separação das mensagens**
+    # Envia mensagens ao usuário
     bot.send_message(user_id, WELCOME_MESSAGE)
-    time.sleep(1)
-
     bot.send_message(user_id, VIP_BENEFITS)
     time.sleep(2)
-
     bot.send_message(user_id, CHECKOUT_MESSAGE)
-    time.sleep(1)
-
     bot.send_message(user_id, "💳 Envie o comprovante de pagamento aqui para validação.")
 
-# Comando /me para admins verificarem estatísticas
-@bot.message_handler(commands=["me"])
+# Comando /status para admins verificarem métricas
+@bot.message_handler(commands=["status"])
 def admin_status(message):
     if message.chat.id in [ADMIN_ID_1, ADMIN_ID_2]:
         bot.send_message(
             message.chat.id,
-            f"📊 Estatísticas do Bot:\n👥 Usuários interagidos: {len(users)}\n📨 Última mensagem automática enviada: {last_auto_message_time}",
+            f"📊 Status do Bot:\n👥 Usuários interagidos: {len(users)}\n📨 Última mensagem automática: {last_auto_message_time}"
         )
     else:
         bot.send_message(message.chat.id, "⛔ Você não tem permissão para acessar este comando.")
 
-# Enviar mídia (foto ou vídeo) no canal
-@bot.message_handler(content_types=["photo", "video"])
-def handle_media(message):
-    user_id = message.chat.id
+# Comando /me para exibir comandos disponíveis para administradores
+@bot.message_handler(commands=["me"])
+def list_admin_commands(message):
+    if message.chat.id in [ADMIN_ID_1, ADMIN_ID_2]:
+        bot.send_message(
+            message.chat.id,
+            "🛠 **Comandos disponíveis:**\n"
+            "/status - Exibir status do bot\n"
+            "/msg <id> <texto> - Enviar mensagem para um usuário\n"
+            "/broadcast <texto> - Enviar mensagem para o canal\n"
+            "/aprovar <id> - Confirmar pagamento e liberar acesso ao VIP\n"
+        )
+    else:
+        bot.send_message(message.chat.id, "⛔ Você não tem permissão para acessar este comando.")
 
-    if user_id not in [ADMIN_ID_1, ADMIN_ID_2]:
-        bot.send_message(user_id, "🚫 Você não tem permissão para enviar mídia.")
-        return
-
-    caption = message.caption if message.caption else "📢 Nova atualização!"
-
-    try:
-        if message.photo:
-            bot.send_photo(CHANNEL_ID, message.photo[-1].file_id, caption=caption)
-        elif message.video:
-            bot.send_video(CHANNEL_ID, message.video.file_id, caption=caption)
-
-        bot.send_message(user_id, "✅ Mídia enviada ao canal!")
-    except Exception as e:
-        bot.send_message(user_id, f"⚠ Erro ao enviar mídia: {e}")
-
-# Comando para admins enviarem mensagens personalizadas
+# Comando para administradores enviarem mensagens diretas
 @bot.message_handler(commands=["msg"])
 def send_admin_message(message):
     if message.chat.id in [ADMIN_ID_1, ADMIN_ID_2]:
         try:
-            parts = message.text.split(" ", 2)
-            target_user_id = int(parts[1])
-            admin_message = parts[2]
-
+            msg_parts = message.text.split(" ", 2)
+            target_user_id = int(msg_parts[1])
+            admin_message = msg_parts[2]
             bot.send_message(target_user_id, f"📩 Mensagem do ADMIN:\n{admin_message}")
             bot.send_message(message.chat.id, "✅ Mensagem enviada com sucesso.")
         except:
-            bot.send_message(message.chat.id, "⚠ Erro: Use o formato `/msg <user_id> <mensagem>`")
+            bot.send_message(message.chat.id, "⚠ Erro: Use `/msg <user_id> <mensagem>`")
+    else:
+        bot.send_message(message.chat.id, "⛔ Você não tem permissão para este comando.")
 
-# Comando para aprovar pagamento
+# Comando /broadcast para enviar mensagens ao canal
+@bot.message_handler(commands=["broadcast"])
+def broadcast_message(message):
+    if message.chat.id in [ADMIN_ID_1, ADMIN_ID_2]:
+        text = message.text.replace("/broadcast ", "")
+        bot.send_message(CHANNEL_ID, text)
+        bot.send_message(message.chat.id, "📢 Mensagem enviada ao canal.")
+    else:
+        bot.send_message(message.chat.id, "⛔ Você não tem permissão para este comando.")
+
+# Processa envio de comprovantes de pagamento
+@bot.message_handler(content_types=["photo", "document"])
+def receber_comprovante(message):
+    user_id = message.chat.id
+    user_name = message.from_user.first_name  
+
+    # Notifica os admins
+    if message.photo or message.document:
+        pending_payments[user_id] = user_name  
+        bot.send_message(ADMIN_ID_1, f"📩 Novo pagamento recebido!\n🆔 ID: {user_id}\n👤 Nome: {user_name}")
+        bot.send_message(ADMIN_ID_2, f"📩 Novo pagamento recebido!\n🆔 ID: {user_id}\n👤 Nome: {user_name}")
+
+        bot.forward_message(ADMIN_ID_1, user_id, message.message_id)
+        bot.forward_message(ADMIN_ID_2, user_id, message.message_id)
+        bot.send_message(user_id, "📨 Seu pagamento foi enviado para análise. Aguarde confirmação.")
+
+# Comando /aprovar para confirmar pagamento e enviar link do VIP
 @bot.message_handler(commands=["aprovar"])
 def confirmar_pagamento(message):
     if message.chat.id in [ADMIN_ID_1, ADMIN_ID_2]:
         try:
-            parts = message.text.split(" ", 1)
-            target_user_id = int(parts[1])
-
-            if target_user_id in pending_payments:
-                bot.send_message(
-                    target_user_id,
-                    f"🎉 Parabéns! Seu pagamento foi confirmado. Aqui está seu acesso ao VIP: {VIP_GROUP_LINK}",
-                )
-                bot.send_message(message.chat.id, f"✅ Acesso VIP liberado para {target_user_id}.")
-                del pending_payments[target_user_id]
-            else:
-                bot.send_message(message.chat.id, "⚠ Este usuário não tem pagamento pendente.")
+            target_user_id = int(message.text.split(" ", 1)[1])
+            bot.send_message(target_user_id, f"🎉 Seu pagamento foi confirmado! Acesse o VIP: {VIP_GROUP_LINK}")
+            bot.send_message(message.chat.id, f"✅ Acesso VIP liberado para {target_user_id}.")
         except:
             bot.send_message(message.chat.id, "⚠ Erro: Use `/aprovar <user_id>`")
+    else:
+        bot.send_message(message.chat.id, "⛔ Você não tem permissão para este comando.")
 
-# Rodar o bot
+# Mantém o bot rodando
 bot.polling()
