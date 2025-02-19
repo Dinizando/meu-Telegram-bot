@@ -11,11 +11,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
-ADMIN_ID_1 = int(os.getenv("ADMIN_ID_1"))
-ADMIN_ID_2 = int(os.getenv("ADMIN_ID_2"))
-LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID"))
-VIP_GROUP_LINK = os.getenv("VIP_GROUP_LINK")
+CHANNEL_ID = int(os.getenv("CHANNEL_ID"))  # Canal de divulgação
+ADMIN_ID_1 = int(os.getenv("ADMIN_ID_1"))  # ID Admin EUA
+ADMIN_ID_2 = int(os.getenv("ADMIN_ID_2"))  # ID Admin Brasil
+LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID"))  # Canal privado de logs do admin
+VIP_GROUP_LINK = os.getenv("VIP_GROUP_LINK")  # Link do VIP
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -25,12 +25,16 @@ WELCOME_MESSAGE = os.getenv("WELCOME_MESSAGE")
 VIP_BENEFITS = os.getenv("VIP_BENEFITS")
 CHECKOUT_MESSAGE = os.getenv("CHECKOUT_MESSAGE")
 VIP_INVITE_MESSAGE = os.getenv("VIP_INVITE_MESSAGE")
+START_MESSAGE = os.getenv("START_MESSAGE")
+VIP_BUTTON_TEXT = os.getenv("VIP_BUTTON_TEXT")
+IMAGE_URL = os.getenv("IMAGE_URL")
 
+# Lista de usuários registrados
 users = set()
-pending_payments = {}
-last_auto_message_time = None
+pending_payments = {}  # Usuários aguardando confirmação de pagamento
+last_auto_message_time = None  # Última mensagem automática enviada
 
-# Configuração de logs
+# Configurar logging para registrar interações
 logging.basicConfig(
     filename="bot_interactions.log",
     level=logging.INFO,
@@ -58,13 +62,13 @@ threading.Thread(target=scheduled_message, daemon=True).start()
 @bot.message_handler(commands=["start"])
 def send_checkout(message):
     user_id = message.chat.id
-    user_name = message.from_user.first_name
-    
+    user_name = message.from_user.first_name  
+
     if user_id in [ADMIN_ID_1, ADMIN_ID_2]:
         bot.send_message(user_id, "✅ Você está autenticado como ADMIN.")
         return  
     
-    users.add(user_id)
+    users.add(user_id)  
     log_message(user_id, user_name, "/start")
     bot.send_message(ADMIN_ID_1, f"📌 Novo usuário interagiu!\n🆔 ID: {user_id}\n👤 Nome: {user_name}")
     bot.send_message(ADMIN_ID_2, f"📌 Novo usuário interagiu!\n🆔 ID: {user_id}\n👤 Nome: {user_name}")
@@ -74,27 +78,40 @@ def send_checkout(message):
     bot.send_message(user_id, CHECKOUT_MESSAGE)
     bot.send_message(user_id, "💳 Envie o comprovante de pagamento aqui para validação.")
 
+@bot.message_handler(commands=["status"])
+def admin_status(message):
+    if message.chat.id in [ADMIN_ID_1, ADMIN_ID_2]:
+        bot.send_message(
+            message.chat.id,
+            f"📊 Status do Bot:\n🟢 Online: Sim\n⏰ Horário atual: {datetime.now()}\n📌 Última mensagem automática: {last_auto_message_time}\n👥 Total de usuários cadastrados: {len(users)}"
+        )
+    else:
+        bot.send_message(message.chat.id, "⛔ Você não tem permissão para acessar este comando.")
+
+@bot.message_handler(commands=["me"])
+def list_admin_commands(message):
+    if message.chat.id in [ADMIN_ID_1, ADMIN_ID_2]:
+        bot.send_message(
+            message.chat.id,
+            "🛠 **Comandos disponíveis:**\n/status - Exibir status do bot\n/msg <id> <texto> - Enviar mensagem para um usuário\n/broadcast <texto> - Enviar mensagem para o canal\n/aprovar <id> - Confirmar pagamento e liberar acesso ao VIP"
+        )
+    else:
+        bot.send_message(message.chat.id, "⛔ Você não tem permissão para acessar este comando.")
+
 @bot.message_handler(commands=["broadcast"])
 def broadcast_message(message):
     if message.chat.id in [ADMIN_ID_1, ADMIN_ID_2]:
-        if message.reply_to_message:
+        if message.reply_to_message and (message.reply_to_message.photo or message.reply_to_message.video):
+            caption = message.text.replace("/broadcast ", "")
             if message.reply_to_message.photo:
-                file_id = message.reply_to_message.photo[-1].file_id
-                caption = message.reply_to_message.caption if message.reply_to_message.caption else ""
-                bot.send_photo(CHANNEL_ID, file_id, caption=caption)
+                bot.send_photo(CHANNEL_ID, message.reply_to_message.photo[-1].file_id, caption=caption)
             elif message.reply_to_message.video:
-                file_id = message.reply_to_message.video.file_id
-                caption = message.reply_to_message.caption if message.reply_to_message.caption else ""
-                bot.send_video(CHANNEL_ID, file_id, caption=caption)
-            else:
-                bot.send_message(message.chat.id, "⚠ Envie uma **foto/vídeo** com legenda para broadcast.")
+                bot.send_video(CHANNEL_ID, message.reply_to_message.video.file_id, caption=caption)
+            bot.send_message(message.chat.id, "📢 Mídia enviada ao canal.")
         else:
             text = message.text.replace("/broadcast ", "")
-            if text.strip():
-                bot.send_message(CHANNEL_ID, text)
-                bot.send_message(message.chat.id, "📢 Mensagem enviada ao canal.")
-            else:
-                bot.send_message(message.chat.id, "⚠ Envie a mensagem no formato `/broadcast <texto>` ou envie uma **foto/vídeo** com legenda.")
+            bot.send_message(CHANNEL_ID, text)
+            bot.send_message(message.chat.id, "📢 Mensagem enviada ao canal.")
     else:
         bot.send_message(message.chat.id, "⛔ Você não tem permissão para este comando.")
 
